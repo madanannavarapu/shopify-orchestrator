@@ -1,0 +1,337 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  shopId       String   @unique
+  shop         Shop     @relation(fields: [shopId], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Shop {
+  id                String   @id
+  myshopifyDomain   String   @unique
+  accessToken       String
+  installedAt       DateTime @default(now())
+  lastActivityAt    DateTime @default(now())
+  apiVersion        String   @default("2024-10")
+  billingPlan       String   @default("free")
+  tenantTier        String   @default("standard") // standard, enterprise, custom
+  tenantPolicies    String?  // JSON blob for tenant-specific policies
+  storeMetadata     String?  // JSON blob for store-specific fields
+
+  users                User[]
+  apps                 App[]
+  bulkOperations       BulkOperation[]
+  complianceRules      ComplianceRule[]
+  complianceEvidences  ComplianceEvidence[]
+  stakeholderFeedback  StakeholderFeedback[]
+  dataConflicts        DataConflict[]
+  pageSpeedResults     PageSpeedResult[]
+  incidents            Incident[]
+  tenantPoliciesRel    TenantPolicy[]
+  vendorNegotiations   VendorNegotiation[]
+}
+
+model TenantPolicy {
+  id          String   @id @default(uuid())
+  shopId      String
+  shop        Shop     @relation(fields: [shopId], references: [id])
+  policyType  String   // data_retention, access_control, review_cadence, notification
+  name        String
+  value       String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model App {
+  id              String   @id
+  shopId          String
+  shop            Shop     @relation(fields: [shopId], references: [id])
+  name            String
+  handle          String
+  installedAt     DateTime @default(now())
+  lastUsedAt      DateTime?
+  isActive        Boolean  @default(true)
+  category        String?
+  monthlyCost     Float?
+  billingInterval String?
+  developerName   String?
+  performanceScore Int?
+  recommendation  String?
+  themeAssets     String?  // JSON list of injected theme assets for cleanup verification
+
+  ownerName         String?
+  ownerEmail        String?
+  ownerPurpose      String?
+  reviewCadence     String?
+  lastReviewedAt    DateTime?
+  nextReviewAt      DateTime?
+
+  permissions        AppPermission[]
+  events             AppEvent[]
+  findings           ComplianceFinding[]
+  scoreHistory       AppScoreHistory[]
+  pageSpeedImpacts   AppPageSpeedImpact[]
+  dataConflictOne    DataConflict[]  @relation("appOneConflicts")
+  dataConflictTwo    DataConflict[]  @relation("appTwoConflicts")
+  stakeholderFeedbacks StakeholderFeedback[]
+  themeCleanupVerifications ThemeCleanupVerification[]
+  vendorNegotiations VendorNegotiation[]
+
+  @@unique([shopId, handle])
+}
+
+model AppScoreHistory {
+  id              String   @id @default(uuid())
+  appId           String
+  app             App      @relation(fields: [appId], references: [id])
+  performance     Int?
+  cost            Int?
+  functionality   Int?
+  securityRisk    Int?
+  overallScore    Float?
+  recommendation  String?
+  scoredBy        String?  // ai, rule, manual
+  createdAt       DateTime @default(now())
+}
+
+model AppPermission {
+  id        String @id @default(uuid())
+  appId     String
+  app       App    @relation(fields: [appId], references: [id])
+  scope     String
+  isHighRisk Boolean @default(false)
+  @@unique([appId, scope])
+}
+
+model AppEvent {
+  id        String   @id @default(uuid())
+  appId     String
+  app       App      @relation(fields: [appId], references: [id])
+  action    String
+  detail    String?
+  createdAt DateTime @default(now())
+}
+
+model BulkOperation {
+  id             String   @id
+  shopId         String
+  shop           Shop     @relation(fields: [shopId], references: [id])
+  queryType      String
+  status         String   @default("CREATED")
+  objectCount    Int?
+  url            String?
+  createdAt      DateTime @default(now())
+  completedAt    DateTime?
+  errorCode      String?
+}
+
+model ComplianceRule {
+  id          String   @id @default(uuid())
+  shopId      String
+  shop        Shop     @relation(fields: [shopId], references: [id])
+  name        String
+  description String?
+  condition   String
+  severity    String   @default("medium")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  findings    ComplianceFinding[]
+}
+
+model ComplianceFinding {
+  id          String   @id @default(uuid())
+  ruleId      String
+  rule        ComplianceRule @relation(fields: [ruleId], references: [id])
+  appId       String
+  app         App      @relation(fields: [appId], references: [id])
+  message     String
+  severity    String
+  status      String   @default("open")
+  flaggedAt   DateTime @default(now())
+  resolvedAt  DateTime?
+  approvedBy  String?
+  approvedAt  DateTime?
+}
+
+model RemediationAction {
+  id          String   @id @default(uuid())
+  shopId      String
+  appId       String?
+  actionType  String
+  title       String
+  description String?
+  savings     Float?
+  status      String   @default("proposed")
+  createdAt   DateTime @default(now())
+  approvedAt  DateTime?
+  approvedBy  String?
+}
+
+model StakeholderFeedback {
+  id          String   @id @default(uuid())
+  shopId      String
+  shop        Shop     @relation(fields: [shopId], references: [id])
+  appId       String?
+  app         App?     @relation(fields: [appId], references: [id])
+  submittedBy String
+  role        String?
+  question    String
+  response    String
+  severity    String   @default("info")
+  createdAt   DateTime @default(now())
+}
+
+model ComplianceEvidence {
+  id          String   @id @default(uuid())
+  shopId      String
+  shop        Shop     @relation(fields: [shopId], references: [id])
+  eventType   String
+  action      String
+  details     String
+  actor       String?
+  immutable   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+}
+
+model PageSpeedResult {
+  id              String   @id @default(uuid())
+  shopId          String
+  shop            Shop     @relation(fields: [shopId], references: [id])
+  url             String
+  performance     Float?
+  accessibility   Float?
+  bestPractices   Float?
+  seo             Float?
+  fullJson        String?
+  createdAt       DateTime @default(now())
+  appImpacts      AppPageSpeedImpact[]
+}
+
+model AppPageSpeedImpact {
+  id              String   @id @default(uuid())
+  appId           String
+  app             App      @relation(fields: [appId], references: [id])
+  pageSpeedId     String
+  pageSpeed       PageSpeedResult @relation(fields: [pageSpeedId], references: [id])
+  performanceHit  Float?
+  score           Int?
+  createdAt       DateTime @default(now())
+}
+
+model DataConflict {
+  id            String   @id @default(uuid())
+  shopId        String
+  shop          Shop     @relation(fields: [shopId], references: [id])
+  appIdOne      String
+  appOne        App      @relation("appOneConflicts", fields: [appIdOne], references: [id])
+  appIdTwo      String
+  appTwo        App      @relation("appTwoConflicts", fields: [appIdTwo], references: [id])
+  conflictType  String
+  description   String
+  severity      String   @default("medium")
+  status        String   @default("open")
+  createdAt     DateTime @default(now())
+  resolvedAt    DateTime?
+}
+
+// --- NEW MODELS ---
+
+model AgentExecution {
+  id            String   @id @default(uuid())
+  shopId        String
+  agentType     String   // inventory, compliance, redundancy, cost, recommendation, critic
+  status        String   @default("pending") // pending, running, completed, failed
+  input         String?  // JSON input
+  output        String?  // JSON output
+  prompts       String?  // JSON array of prompts used
+  toolCalls     String?  // JSON array of tool calls
+  latencyMs     Int?
+  costUsd       Float?
+  error         String?
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+  parentExecutionId String? // for chain-of-prompts tracking
+}
+
+model Incident {
+  id              String   @id @default(uuid())
+  shopId          String
+  shop            Shop     @relation(fields: [shopId], references: [id])
+  incidentType    String   // breach, abnormal_access, policy_violation, data_leak
+  severity        String   @default("medium") // critical, high, medium, low
+  title           String
+  description     String
+  source          String?  // agent, scanner, manual, webhook
+  status          String   @default("open") // open, investigating, contained, resolved
+  assignedTo      String?
+  detectedAt      DateTime @default(now())
+  resolvedAt      DateTime?
+  resolution      String?
+
+  escalations     IncidentEscalation[]
+}
+
+model IncidentEscalation {
+  id          String   @id @default(uuid())
+  incidentId  String
+  incident    Incident @relation(fields: [incidentId], references: [id])
+  escalatedTo String
+  reason      String
+  escalatedAt DateTime @default(now())
+  respondedAt DateTime?
+  response    String?
+}
+
+model ThemeCleanupVerification {
+  id            String   @id @default(uuid())
+  appId         String
+  app           App      @relation(fields: [appId], references: [id])
+  assetType     String   // script, stylesheet, snippet, asset, block
+  assetPath     String
+  isPresent     Boolean  @default(true)
+  verifiedAt    DateTime @default(now())
+  cleanRemoved  Boolean  @default(false)
+}
+
+model VendorNegotiation {
+  id            String   @id @default(uuid())
+  shopId        String
+  shop          Shop     @relation(fields: [shopId], references: [id])
+  appId         String?
+  app           App?     @relation(fields: [appId], references: [id])
+  vendorName    String
+  currentCost   Float?
+  proposedCost  Float?
+  savings       Float?
+  status        String   @default("draft") // draft, sent, negotiating, accepted, rejected
+  message       String?
+  draftText     String?
+  createdAt     DateTime @default(now())
+  sentAt        DateTime?
+  acceptedAt    DateTime?
+}
+
+model QueryRouterCache {
+  id            String   @id @default(uuid())
+  shopId        String
+  queryHash     String
+  queryType     String   // simple, complex
+  response      String?  // cached response
+  ttlSeconds    Int      @default(300)
+  createdAt     DateTime @default(now())
+  expiresAt     DateTime
+}
