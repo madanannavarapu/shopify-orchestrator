@@ -7,7 +7,7 @@
     "dev:server": "tsx watch server/index.ts",
     "dev:frontend": "vite",
     "build": "prisma generate && tsc && vite build",
-    "start": "tsx server/index.ts",
+    "start": "prisma db push --skip-generate && tsx server/index.ts",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
