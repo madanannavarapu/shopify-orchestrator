@@ -556,6 +556,7 @@ router.post('/api/evidence/upload', validateSession, async (req: Request, res: R
     }
 
     const { supabase } = await import('../supabase');
+    if (!supabase) return res.status(400).json({ error: 'Supabase not configured' });
     const buffer = Buffer.from(file.replace(/^data:.+;base64,/, ''), 'base64');
     const fileName = `${shopDomain}/${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`;
 
@@ -595,6 +596,7 @@ router.get('/api/evidence/files', validateSession, async (req: Request, res: Res
   try {
     const shopDomain = (req as any).shop;
     const { supabase } = await import('../supabase');
+    if (!supabase) return res.status(400).json({ error: 'Supabase not configured' });
 
     const { data, error } = await supabase.storage
       .from('evidence')
