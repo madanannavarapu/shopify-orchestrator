@@ -27,6 +27,13 @@ router.get('/auth/callback', async (req: Request, res: Response) => {
       create: { id: session.shop, myshopifyDomain: session.shop, accessToken: session.accessToken || '' },
       update: { accessToken: session.accessToken || '', lastActivityAt: new Date() },
     });
+
+    const engineUrl = process.env.COMPLIANCE_ENGINE_URL || 'http://localhost:8000';
+    try {
+      const params = new URLSearchParams({ shop: session.shop, access_token: session.accessToken || '' });
+      await fetch(`${engineUrl}/webhooks/shopify/register-webhooks?${params}`, { method: 'POST' });
+    } catch { /* non-fatal */ }
+
     res.redirect(`/?shop=${session.shop}&host=${req.query.host}`);
   } catch (error) {
     console.error('Auth callback error:', error);
