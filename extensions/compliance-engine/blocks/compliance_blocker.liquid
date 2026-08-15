@@ -1,0 +1,189 @@
+{% comment %}
+  Compliance blocker — intercepts tracker scripts and defers/blocks based on
+  consent policy. Add this block to your theme's <head> section.
+  Works alongside the consent banner block (reads ce_consent_status from localStorage).
+{% endcomment %}
+
+<script>
+(function() {
+  var CE_API = '{{ block.settings.api_url }}' || 'https://niadat.com';
+  var CE_DOMAIN_ID = '{{ block.settings.domain_id }}';
+  var CE_STORAGE_KEY = 'ce_consent_status';
+  var CE_CACHE_KEY = 'ce_bootstrap_cache';
+  var CE_CACHE_TTL = 3600000;
+
+  if (!CE_DOMAIN_ID) return;
+
+  function getConsent() {
+    try { return localStorage.getItem(CE_STORAGE_KEY); } catch(e) { return null; }
+  }
+
+  function detectGeo() {
+    try {
+      var lang = navigator.language || '';
+      var parts = lang.split('-');
+      return parts.length > 1 ? parts[parts.length - 1].toUpperCase() : null;
+    } catch(e) { return null; }
+  }
+
+  function getCachedBootstrap() {
+    try {
+      var raw = sessionStorage.getItem(CE_CACHE_KEY);
+      if (!raw) return null;
+      var cached = JSON.parse(raw);
+      if (Date.now() - cached.ts > CE_CACHE_TTL) return null;
+      return cached.data;
+    } catch(e) { return null; }
+  }
+
+  function cacheBootstrap(data) {
+    try {
+      sessionStorage.setItem(CE_CACHE_KEY, JSON.stringify({ data: data, ts: Date.now() }));
+    } catch(e) {}
+  }
+
+  function isTrackerDomain(src, knownTrackers) {
+    if (!src) return null;
+    try {
+      var hostname = new URL(src, location.href).hostname;
+      for (var domain in knownTrackers) {
+        if (hostname === domain || hostname.endsWith('.' + domain)) {
+          return { domain: domain, category: knownTrackers[domain] };
+        }
+      }
+    } catch(e) {}
+    return null;
+  }
+
+  function shouldBlock(category, policy) {
+    if (category === 'essential') return false;
+    var allowKey = 'allow_' + category + '_pre_consent';
+    var deferKey = 'defer_' + category + '_until_consent';
+    var blockKey = 'block_' + category + '_until_consent';
+    if (policy[allowKey]) return false;
+    if (policy[blockKey]) return true;
+    if (policy[deferKey]) return true;
+    return false;
+  }
+
+  function deferScript(script) {
+    if (script.ceDeferred) return;
+    script.ceDeferred = true;
+    script.ceOriginalType = script.type || '';
+    script.ceOriginalSrc = script.src || '';
+    script.type = 'text/ce-deferred';
+    script.ceOriginalAsync = script.async;
+    script.ceOriginalDefer = script.defer;
+    script.removeAttribute('src');
+    script.async = false;
+    script.defer = false;
+  }
+
+  function unblockScript(script, category) {
+    if (!script.ceDeferred) return;
+    script.type = script.ceOriginalType || '';
+    if (script.ceOriginalSrc) script.src = script.ceOriginalSrc;
+    if (script.ceOriginalAsync) script.async = true;
+    if (script.ceOriginalDefer) script.defer = true;
+    script.ceDeferred = false;
+  }
+
+  function unblockByConsent(knownTrackers, policy) {
+    var consent = getConsent();
+    if (!consent || consent === 'declined') return;
+    var scripts = document.querySelectorAll('script[type="text/ce-deferred"]');
+    for (var i = 0; i < scripts.length; i++) {
+      var info = isTrackerDomain(scripts[i].ceOriginalSrc, knownTrackers);
+      if (info && !shouldBlock(info.category, policy)) {
+        unblockScript(scripts[i], info.category);
+      }
+    }
+  }
+
+  var cached = getCachedBootstrap();
+  if (cached) {
+    intercept(cached.effective_policy, cached.known_trackers);
+    return;
+  }
+
+  var geo = detectGeo();
+  var url = CE_API + '/api/scan/public/bootstrap?domain_id=' + encodeURIComponent(CE_DOMAIN_ID);
+  if (geo) url += '&user_region_code=' + encodeURIComponent(geo);
+
+  fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.effective_policy && data.known_trackers) {
+        cacheBootstrap(data);
+        intercept(data.effective_policy, data.known_trackers);
+      }
+    })
+    .catch(function() {});
+
+  function intercept(policy, knownTrackers) {
+    var consent = getConsent();
+    var consentGiven = consent === 'granted';
+
+    var existing = document.querySelectorAll('script[src]');
+    for (var i = 0; i < existing.length; i++) {
+      var info = isTrackerDomain(existing[i].src, knownTrackers);
+      if (info) {
+        if (consentGiven && !shouldBlock(info.category, policy)) continue;
+        if (shouldBlock(info.category, policy)) {
+          deferScript(existing[i]);
+        }
+      }
+    }
+
+    if (consentGiven) {
+      unblockByConsent(knownTrackers, policy);
+    }
+
+    var observer = new MutationObserver(function(mutations) {
+      for (var m = 0; m < mutations.length; m++) {
+        var nodes = mutations[m].addedNodes;
+        for (var n = 0; n < nodes.length; n++) {
+          var node = nodes[n];
+          if (node.nodeName !== 'SCRIPT' || !node.src) continue;
+          var info = isTrackerDomain(node.src, knownTrackers);
+          if (info && shouldBlock(info.category, policy)) {
+            deferScript(node);
+          }
+        }
+      }
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+
+    window.addEventListener('storage', function(e) {
+      if (e.key === CE_STORAGE_KEY) {
+        if (e.newValue === 'granted') {
+          unblockByConsent(knownTrackers, policy);
+        }
+      }
+    });
+  }
+})();
+</script>
+
+{% schema %}
+{
+  "name": "Compliance Blocker",
+  "settings": [
+    {
+      "type": "text",
+      "id": "api_url",
+      "label": "API URL",
+      "default": "https://niadat.com"
+    },
+    {
+      "type": "text",
+      "id": "domain_id",
+      "label": "Domain ID",
+      "info": "The domain_compliance_config ID for this store"
+    }
+  ],
+  "presets": [
+    { "name": "Compliance Blocker" }
+  ]
+}
+{% endschema %}
