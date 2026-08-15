@@ -1,0 +1,114 @@
+{% comment %}
+  Cookie consent banner — fetches config from app, records consent choices.
+  Add this block to your theme's footer or layout section.
+{% endcomment %}
+
+<div id="ce-consent-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9999;background:#fff;border-top:1px solid #e1e3e5;padding:16px 24px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;box-shadow:0 -2px 8px rgba(0,0,0,0.08);">
+  <div style="max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+    <p id="ce-consent-message" style="margin:0;font-size:14px;color:#202223;flex:1;">
+      We use cookies to improve your experience. By continuing, you agree to our cookie policy.
+    </p>
+    <div style="display:flex;gap:8px;flex-shrink:0;">
+      <button id="ce-decline-btn" style="padding:8px 16px;border:1px solid #c9cccf;border-radius:4px;background:#fff;color:#202223;font-size:14px;cursor:pointer;">
+        Decline
+      </button>
+      <button id="ce-accept-btn" style="padding:8px 16px;border:1px solid transparent;border-radius:4px;background:#008060;color:#fff;font-size:14px;cursor:pointer;">
+        Accept
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var CE_STORAGE_KEY = 'ce_consent_status';
+  var CE_SHOP = '{{ shop.permanent_domain }}';
+  var CE_APP_URL = '{{ block.settings.app_url }}';
+  var CE_PURPOSES = ({{ block.settings.purposes | default: '"marketing,analytics"' }}).split(',');
+
+  function getConsent() {
+    try { return localStorage.getItem(CE_STORAGE_KEY); } catch(e) { return null; }
+  }
+
+  function setConsent(status) {
+    try { localStorage.setItem(CE_STORAGE_KEY, status); } catch(e) {}
+  }
+
+  if (getConsent()) return;
+
+  var banner = document.getElementById('ce-consent-banner');
+  if (!banner) return;
+  banner.style.display = 'block';
+
+  var message = banner.querySelector('#ce-consent-message');
+  if (message && '{{ block.settings.message }}') {
+    message.textContent = '{{ block.settings.message }}';
+  }
+
+  function recordConsent(granted) {
+    var body = {
+      shop: CE_SHOP,
+      customer_id: 'guest_' + Date.now(),
+      purposes: CE_PURPOSES,
+      granted: granted,
+      source: 'widget'
+    };
+
+    if (CE_APP_URL) {
+      fetch(CE_APP_URL + '/api/consent/record', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      }).catch(function() {});
+    }
+
+    setConsent(granted ? 'granted' : 'declined');
+    banner.style.display = 'none';
+
+    // ponytail: propagate consent to Shopify's Customer Privacy API so other
+    // apps and Shopify's own tracking see the consent decision. Guard on the
+    // API existing — it's only available when the Customer Privacy API is
+    // enabled in the Shopify app settings.
+    if (typeof Shopify !== 'undefined' && Shopify.customerPrivacy) {
+      var prefs = {};
+      CE_PURPOSES.forEach(function(p) {
+        var key = p.trim();
+        prefs[key] = granted;
+      });
+      Shopify.customerPrivacy.setTrackingConsent(granted, prefs);
+    }
+  }
+
+  banner.querySelector('#ce-accept-btn').addEventListener('click', function() { recordConsent(true); });
+  banner.querySelector('#ce-decline-btn').addEventListener('click', function() { recordConsent(false); });
+})();
+</script>
+
+{% schema %}
+{
+  "name": "Consent Banner",
+  "settings": [
+    {
+      "type": "text",
+      "id": "app_url",
+      "label": "App URL",
+      "default": "https://niadat.com"
+    },
+    {
+      "type": "textarea",
+      "id": "message",
+      "label": "Consent message",
+      "default": "We use cookies to improve your experience. By continuing, you agree to our cookie policy."
+    },
+    {
+      "type": "text",
+      "id": "purposes",
+      "label": "Consent purposes (comma-separated)",
+      "default": "marketing,analytics"
+    }
+  ],
+  "presets": [
+    { "name": "Consent Banner" }
+  ]
+}
+{% endschema %}
