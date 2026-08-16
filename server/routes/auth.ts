@@ -11,11 +11,10 @@ const JWT_SECRET = process.env.JWT_SECRET || 'orchestrator-dev-secret-change-in-
 router.get('/auth', async (req: Request, res: Response) => {
   const shop = req.query.shop as string;
   if (!shop) return res.status(400).send('Missing shop parameter');
-  const authPath = await shopify.auth.begin({
+  await shopify.auth.begin({
     shop, callbackPath: '/auth/callback', isOnline: false,
     rawRequest: req, rawResponse: res,
   });
-  res.redirect(authPath);
 });
 
 router.get('/auth/callback', async (req: Request, res: Response) => {
