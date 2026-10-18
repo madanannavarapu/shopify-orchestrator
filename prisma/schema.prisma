@@ -22,6 +22,8 @@ model Shop {
   id                String   @id
   myshopifyDomain   String   @unique
   accessToken       String
+  refreshToken      String?  // For expiring offline tokens
+  tokenExpiresAt    DateTime? // When the access token expires
   installedAt       DateTime @default(now())
   lastActivityAt    DateTime @default(now())
   apiVersion        String   @default("2024-10")
@@ -334,4 +336,146 @@ model QueryRouterCache {
   ttlSeconds    Int      @default(300)
   createdAt     DateTime @default(now())
   expiresAt     DateTime
+}
+
+// --- CONSENT MANAGEMENT ---
+
+model ConsentPurpose {
+  id          String   @id @default(uuid())
+  shopId      String
+  name        String   // marketing, analytics, personalization, communication, social
+  label       String
+  description String?
+  isRequired  Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  records     ConsentRecord[]
+
+  @@unique([shopId, name])
+}
+
+model ConsentRecord {
+  id          String   @id @default(uuid())
+  shopId      String
+  customerId  String   // Shopify customer ID
+  email       String
+  purposeId   String
+  purpose     ConsentPurpose @relation(fields: [purposeId], references: [id])
+  granted     Boolean  @default(false)
+  source      String   // widget, checkout, customers_tab, api, manual
+  ipAddress   String?
+  userAgent   String?
+  consentedAt DateTime @default(now())
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([shopId, customerId])
+  @@index([shopId, email])
+}
+
+model ConsentTemplate {
+  id            String   @id @default(uuid())
+  shopId        String
+  name          String
+  title         String
+  message       String
+  purposes      String   // JSON array of purpose names
+  theme         String   @default("light") // light, dark, custom
+  position      String   @default("bottom-right") // bottom-right, bottom-left, top-right, top-left, center
+  buttonText    String   @default("Accept")
+  declineText   String   @default("Decline")
+  showCheckbox  Boolean  @default(true)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// --- DSR AUTOMATION ---
+
+model DataSubjectRequest {
+  id            String   @id @default(uuid())
+  shopId        String
+  customerId    String
+  email         String
+  requestType   String   // access, rectification, erasure, restriction, portability, objection
+  status        String   @default("pending") // pending, processing, completed, rejected, withdrawn
+  description   String?
+  notes         String?
+  deadlineAt    DateTime
+  completedAt   DateTime?
+  rejectedAt    DateTime?
+  rejectionReason String?
+  anonymizedAt  DateTime?
+  notifiedAt    DateTime?
+  notifiedVia   String?  // email, none
+  createdBy     String   // customer, merchant, system
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  timeline      DsrTimeline[]
+
+  @@index([shopId, customerId])
+  @@index([shopId, status])
+}
+
+model DsrTimeline {
+  id              String   @id @default(uuid())
+  dsrId           String
+  dsr             DataSubjectRequest @relation(fields: [dsrId], references: [id])
+  action          String   // created, processed, notified, completed, rejected, withdrawn, extended
+  detail          String?
+  actor           String
+  createdAt       DateTime @default(now())
+}
+
+model DsrTemplate {
+  id          String   @id @default(uuid())
+  shopId      String
+  name        String
+  requestType String   // access, rectification, erasure, restriction, portability, objection
+  subject     String
+  body        String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// --- COMPLIANCE DASHBOARD ---
+
+model ComplianceChecklistItem {
+  id          String   @id @default(uuid())
+  shopId      String
+  category    String   // data_protection, app_governance, security, api_compliance, privacy
+  title       String
+  description String?
+  isRequired  Boolean  @default(false)
+  completed   Boolean  @default(false)
+  completedAt DateTime?
+  score       Int?     // 0-100 per-item score
+  weight      Int      @default(1)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([shopId, category])
+}
+
+model ComplianceScoreSnapshot {
+  id              String   @id @default(uuid())
+  shopId          String
+  overallScore    Int      // 0-100
+  dataProtection  Int?
+  appGovernance   Int?
+  securityScore   Int?
+  apiCompliance   Int?
+  privacyScore    Int?
+  checklistTotal  Int?
+  checklistDone   Int?
+  snapshotDate    DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([shopId, snapshotDate])
 }

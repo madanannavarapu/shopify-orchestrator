@@ -1,6 +1,5 @@
 import '@shopify/shopify-api/adapters/node';
 import { shopifyApi, ApiVersion, LogSeverity, Session, type Shopify } from '@shopify/shopify-api';
-import { restResources } from '@shopify/shopify-api/rest/admin/2024-10';
 import { config } from './config';
 
 export const shopify: Shopify = shopifyApi({
@@ -11,8 +10,8 @@ export const shopify: Shopify = shopifyApi({
   hostScheme: config.shopify.appUrl.startsWith('https') ? 'https' : 'http',
   apiVersion: ApiVersion.October24,
   isEmbeddedApp: true,
+  expiringOfflineAccessTokens: true,
   logLevel: LogSeverity.Warning,
-  restResources,
 });
 
 export function buildSession(shop: string, accessToken: string): Session {

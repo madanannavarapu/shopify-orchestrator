@@ -1,4 +1,4 @@
-const BASE = '';
+const BASE = import.meta.env.DEV ? '' : '/orchestrator';
 
 const shopFromUrl = typeof window !== 'undefined'
   ? new URLSearchParams(window.location.search).get('shop') || ''
@@ -14,10 +14,26 @@ function addShop(url: string): string {
   return `${url}${sep}shop=${encodeURIComponent(shopFromUrl)}`;
 }
 
+async function shopifySessionToken(): Promise<string | null> {
+  const shopify = (window as any).shopify;
+  if (!shopify?.idToken) return null;
+  const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000));
+  try {
+    return await Promise.race([Promise.resolve(shopify.idToken()), timeout]);
+  } catch {
+    return null;
+  }
+}
+
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const token = getToken();
-  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  } else {
+    const sessionToken = await shopifySessionToken();
+    if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
+  }
 
   const res = await fetch(`${BASE}${addShop(url)}`, {
     credentials: 'include',
@@ -144,5 +160,51 @@ export const api = {
     policies: () => fetchJson<any>('/api/tenant/policies'),
     setPolicy: (data: any) => fetchJson<any>('/api/tenant/policies', { method: 'POST', body: JSON.stringify(data) }),
     updateMetadata: (data: any) => fetchJson<any>('/api/tenant/metadata', { method: 'POST', body: JSON.stringify(data) }),
+  },
+  consent: {
+    getPurposes: () => fetchJson<any>('/api/consent/purposes'),
+    createPurpose: (data: any) => fetchJson<any>('/api/consent/purposes', jsonBody(data)),
+    updatePurpose: (id: string, data: any) => fetchJson<any>(`/api/consent/purposes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    seedPurposes: () => fetchJson<any>('/api/consent/purposes/seed', { method: 'POST' }),
+    getRecords: (params?: any) => { const q = new URLSearchParams(); if (params?.customerId) q.set('customerId', params.customerId); if (params?.email) q.set('email', params.email); return fetchJson<any>(`/api/consent/records?${q}`); },
+    recordConsent: (data: any) => fetchJson<any>('/api/consent/records', jsonBody(data)),
+    getConsentStats: () => fetchJson<any>('/api/consent/records/stats'),
+    exportConsent: () => fetchJson<any>('/api/consent/records/export'),
+    getCustomerConsentStatus: (customerId: string) => fetchJson<any>(`/api/consent/customers/${customerId}/status`),
+    updateCustomerConsent: (customerId: string, data: any) => fetchJson<any>(`/api/consent/customers/${customerId}/status`, jsonBody(data)),
+    getTemplates: () => fetchJson<any>('/api/consent/templates'),
+    createTemplate: (data: any) => fetchJson<any>('/api/consent/templates', jsonBody(data)),
+    updateTemplate: (id: string, data: any) => fetchJson<any>(`/api/consent/templates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteTemplate: (id: string) => fetchJson<any>(`/api/consent/templates/${id}`, { method: 'DELETE' }),
+    getWidget: () => fetchJson<any>('/api/consent/widget'),
+  },
+  dsr: {
+    list: (params?: any) => { const q = new URLSearchParams(); if (params?.status) q.set('status', params.status); if (params?.requestType) q.set('requestType', params.requestType); if (params?.limit) q.set('limit', params.limit); return fetchJson<any>(`/api/dsr?${q}`); },
+    create: (data: any) => fetchJson<any>('/api/dsr', jsonBody(data)),
+    get: (id: string) => fetchJson<any>(`/api/dsr/${id}`),
+    getStats: () => fetchJson<any>('/api/dsr/stats'),
+    process: (id: string) => fetchJson<any>(`/api/dsr/${id}/process`, { method: 'POST' }),
+    complete: (id: string) => fetchJson<any>(`/api/dsr/${id}/complete`, { method: 'POST' }),
+    reject: (id: string, reason: string) => fetchJson<any>(`/api/dsr/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
+    anonymize: (id: string) => fetchJson<any>(`/api/dsr/${id}/anonymize`, { method: 'POST' }),
+    notify: (id: string, via?: string) => fetchJson<any>(`/api/dsr/${id}/notify`, { method: 'POST', body: JSON.stringify({ via }) }),
+    withdraw: (id: string) => fetchJson<any>(`/api/dsr/${id}/withdraw`, { method: 'POST' }),
+    sendEmail: (id: string) => fetchJson<any>(`/api/dsr/${id}/send-email`, { method: 'POST' }),
+    getOverdue: () => fetchJson<any>('/api/dsr/overdue'),
+    getUpcoming: (days?: number) => fetchJson<any>(`/api/dsr/deadlines/upcoming?days=${days || 7}`),
+    getTemplates: (requestType?: string) => fetchJson<any>(`/api/dsr/templates${requestType ? `?requestType=${requestType}` : ''}`),
+    createTemplate: (data: any) => fetchJson<any>('/api/dsr/templates', jsonBody(data)),
+    updateTemplate: (id: string, data: any) => fetchJson<any>(`/api/dsr/templates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteTemplate: (id: string) => fetchJson<any>(`/api/dsr/templates/${id}`, { method: 'DELETE' }),
+    seedTemplates: () => fetchJson<any>('/api/dsr/templates/defaults', { method: 'POST' }),
+  },
+  dashboard: {
+    summary: () => fetchJson<any>('/api/dashboard/summary'),
+    score: () => fetchJson<any>('/api/dashboard/score'),
+    checklist: () => fetchJson<any>('/api/dashboard/checklist'),
+    updateChecklistItem: (id: string, data: any) => fetchJson<any>(`/api/dashboard/checklist/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    scoreHistory: (days?: number) => fetchJson<any>(`/api/dashboard/score-history?days=${days || 30}`),
+    snapshot: () => fetchJson<any>('/api/dashboard/snapshot', { method: 'POST' }),
+    platformStatus: () => fetchJson<any>('/api/dashboard/platform-status'),
   },
 };

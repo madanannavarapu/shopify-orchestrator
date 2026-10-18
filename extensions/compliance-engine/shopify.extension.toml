@@ -1,0 +1,14 @@
+api_version = "2024-10"
+
+[[extensions]]
+type = "theme"
+name = "Compliance Engine"
+description = "Cookie consent banner and trust score badge for your storefront"
+
+[[extensions.blocks]]
+name = "Consent Banner"
+file = "blocks/consent_banner.liquid"
+
+[[extensions.blocks]]
+name = "Trust Badge"
+file = "blocks/trust_badge.liquid"

@@ -1,0 +1,56 @@
+name = "Compliance Engine"
+handle = "compliance-engine"
+client_id = "dfe404fb62677a08df393f0bfc702b21"
+app_url = "https://niadat.com/orchestrator"
+embedded = true
+
+[access_scopes]
+scopes = "read_customers,write_customers,read_orders"
+
+[auth]
+redirect_urls = [
+  "http://localhost:3000/auth/callback",
+  "https://niadat.com/auth/callback",
+]
+
+[webhooks]
+api_version = "2024-10"
+
+[[webhooks.subscriptions]]
+  topics = ["customers/data_request"]
+  uri = "/webhooks/shopify/gdpr-data-request"
+
+[[webhooks.subscriptions]]
+  topics = ["customers/redact"]
+  uri = "/webhooks/shopify/gdpr-redact"
+
+[[webhooks.subscriptions]]
+  topics = ["shop/redact"]
+  uri = "/webhooks/shopify/gdpr-redact"
+
+[[webhooks.subscriptions]]
+  topics = ["orders/created"]
+  uri = "/webhooks/shopify"
+
+[[webhooks.subscriptions]]
+  topics = ["orders/cancelled"]
+  uri = "/webhooks/shopify"
+
+[[webhooks.subscriptions]]
+  topics = ["orders/fulfilled"]
+  uri = "/webhooks/shopify"
+
+[[webhooks.subscriptions]]
+  topics = ["customers/create"]
+  uri = "/webhooks/shopify"
+
+[[webhooks.subscriptions]]
+  topics = ["customers/update"]
+  uri = "/webhooks/shopify"
+
+[[webhooks.subscriptions]]
+  topics = ["app/uninstalled"]
+  uri = "/webhooks/shopify/uninstall"
+
+[pos]
+embedded = false

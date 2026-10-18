@@ -1,0 +1,110 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5433:5432"
+    environment:
+      POSTGRES_DB: compliance_engine
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  orchestrator-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: shopify_orchestrator
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - orchestrator-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  compliance-backend:
+    build:
+      context: ./compliance-engine
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: compliance_engine
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      DATABASE_URL: postgresql://postgres:${DB_PASSWORD_URLENC}@db:5432/compliance_engine
+      JWT_SECRET: ${JWT_SECRET}
+      LEADS_SYNC_TOKEN: ${LEADS_SYNC_TOKEN}
+      FRONTEND_URL: https://${DOMAIN}
+      BACKEND_URL: https://${DOMAIN}/api
+      BROWSER_FALLBACK_ENABLED: "1"
+      BROWSER_INTERACT_ENABLED: "1"
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      SHOPIFY_CLIENT_ID: ${SHOPIFY_API_KEY}
+      SHOPIFY_CLIENT_SECRET: ${SHOPIFY_API_SECRET}
+      ORCHESTRATOR_URL: http://shopify-orchestrator:3000
+    depends_on:
+      db:
+        condition: service_healthy
+
+  compliance-frontend:
+    build:
+      context: ./compliance-engine/frontend/compliance-ui
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: https://${DOMAIN}/api
+    depends_on:
+      - compliance-backend
+
+  shopify-orchestrator:
+    build:
+      context: ./shopify-orchestrator
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      DATABASE_URL: postgresql://postgres:${DB_PASSWORD_URLENC}@orchestrator-db:5432/shopify_orchestrator
+      SHOPIFY_API_KEY: ${SHOPIFY_API_KEY}
+      SHOPIFY_API_SECRET: ${SHOPIFY_API_SECRET}
+      SHOPIFY_APP_URL: https://${DOMAIN}
+      SCOPES: read_customers,write_customers,read_orders
+      JWT_SECRET: ${JWT_SECRET}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      COMPLIANCE_ENGINE_URL: http://compliance-backend:8000
+    depends_on:
+      orchestrator-db:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/html:/usr/share/nginx/html:ro
+      - nginx-ssl:/etc/letsencrypt
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - compliance-backend
+      - compliance-frontend
+      - shopify-orchestrator
+
+volumes:
+  pgdata:
+  orchestrator-pgdata:
+  nginx-ssl:

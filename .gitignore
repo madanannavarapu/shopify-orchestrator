@@ -5,3 +5,5 @@ frontend/dist/
 *.db
 *.db-journal
 server.log
+vite-out.txt
+vite-err.txt

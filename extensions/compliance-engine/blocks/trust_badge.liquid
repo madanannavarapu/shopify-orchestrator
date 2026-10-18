@@ -1,0 +1,47 @@
+{% comment %}
+  Trust score badge — displays compliance score as an SVG badge.
+  Add this block to your theme's footer or product page.
+{% endcomment %}
+
+<div class="ce-trust-badge" style="display:inline-block;">
+  <a href="{{ block.settings.details_url }}" target="_blank" rel="noopener noreferrer">
+    <img
+      src="{{ block.settings.app_url }}/api/compliance/trust-badge/{{ shop.permanent_domain }}.svg"
+      alt="Compliance Trust Score"
+      style="height:{{ block.settings.badge_size | default: 32 }}px;width:auto;"
+      loading="lazy"
+    />
+  </a>
+</div>
+
+{% schema %}
+{
+  "name": "Trust Badge",
+  "settings": [
+    {
+      "type": "text",
+      "id": "app_url",
+      "label": "App URL",
+      "default": "https://niadat.com"
+    },
+    {
+      "type": "text",
+      "id": "details_url",
+      "label": "Details page URL",
+      "default": "https://niadat.com/dashboard"
+    },
+    {
+      "type": "range",
+      "id": "badge_size",
+      "label": "Badge height (px)",
+      "min": 16,
+      "max": 64,
+      "step": 4,
+      "default": 32
+    }
+  ],
+  "presets": [
+    { "name": "Trust Badge" }
+  ]
+}
+{% endschema %}
