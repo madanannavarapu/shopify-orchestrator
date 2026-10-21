@@ -8,6 +8,7 @@ import { config } from './config';
 import { connectDatabase, disconnectDatabase, prisma } from './database';
 import { supabase } from './supabase';
 import { shopify } from './shopify';
+import { deliverTokensToEngine } from './engine-client';
 import authRoutes from './routes/auth';
 import webhookRoutes from './routes/webhooks';
 import appRoutes from './routes/apps';
@@ -119,6 +120,12 @@ async function start() {
             lastActivityAt: new Date(),
           },
         });
+
+        await deliverTokensToEngine(
+          shop.myshopifyDomain,
+          data.access_token,
+          data.refresh_token || shop.refreshToken,
+        );
 
         console.log(`[refresh] Token refreshed for ${shop.myshopifyDomain}`);
       }

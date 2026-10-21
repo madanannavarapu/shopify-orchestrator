@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { shopify } from '../shopify';
 import { config } from '../config';
 import { prisma } from '../database';
+import { deliverTokensToEngine } from '../engine-client';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'orchestrator-dev-secret-change-in-prod';
@@ -115,19 +116,8 @@ router.get('/auth/callback', async (req: Request, res: Response) => {
       },
     });
 
-    const engineUrl = process.env.COMPLIANCE_ENGINE_URL || 'http://localhost:8000';
-    try {
-      // Tokens go in the body, never the query string (they would land in access logs).
-      await fetch(`${engineUrl}/webhooks/shopify/register-webhooks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          shop,
-          access_token: accessToken,
-          ...(refreshToken ? { refresh_token: refreshToken } : {}),
-        }),
-      });
-    } catch (e) { console.error('[auth] register-webhooks call failed (non-fatal):', e); }
+    // Tokens go in the body, never the query string (they would land in access logs).
+    await deliverTokensToEngine(shop, accessToken, refreshToken ?? null, { scope: tokenData.scope });
 
     // ponytail: connected=1 marks "token stored" so the SPA can enter app state without looping back into OAuth
     res.redirect(`/orchestrator/?shop=${shop}&host=${req.query.host}&connected=1`);
