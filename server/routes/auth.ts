@@ -117,12 +117,16 @@ router.get('/auth/callback', async (req: Request, res: Response) => {
 
     const engineUrl = process.env.COMPLIANCE_ENGINE_URL || 'http://localhost:8000';
     try {
-      const params = new URLSearchParams({
-        shop,
-        access_token: accessToken,
-        ...(refreshToken ? { refresh_token: refreshToken } : {}),
+      // Tokens go in the body, never the query string (they would land in access logs).
+      await fetch(`${engineUrl}/webhooks/shopify/register-webhooks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shop,
+          access_token: accessToken,
+          ...(refreshToken ? { refresh_token: refreshToken } : {}),
+        }),
       });
-      await fetch(`${engineUrl}/webhooks/shopify/register-webhooks?${params}`, { method: 'POST' });
     } catch (e) { console.error('[auth] register-webhooks call failed (non-fatal):', e); }
 
     // ponytail: connected=1 marks "token stored" so the SPA can enter app state without looping back into OAuth
