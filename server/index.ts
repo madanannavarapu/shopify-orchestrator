@@ -82,8 +82,9 @@ async function start() {
     console.log(`Scopes: ${config.shopify.scopes.join(', ')}`);
   });
 
-  // ponytail: Refresh expiring tokens every 6h before they expire (24h lifetime)
-  setInterval(async () => {
+  // Shopify issues 1-hour access tokens: check every 30 min and refresh anything
+  // with <45 min left. Also runs once on boot so a restart is not a dead window.
+  const refreshExpiringTokens = async () => {
     try {
       const shops = await prisma.shop.findMany({
         where: { tokenExpiresAt: { not: null }, refreshToken: { not: null } },
@@ -91,7 +92,7 @@ async function start() {
       for (const shop of shops) {
         if (!shop.tokenExpiresAt || !shop.refreshToken) continue;
         const hoursUntilExpiry = (shop.tokenExpiresAt.getTime() - Date.now()) / (1000 * 60 * 60);
-        if (hoursUntilExpiry > 6) continue; // still fresh
+        if (hoursUntilExpiry > 0.75) continue; // still fresh (1h tokens)
 
         console.log(`[refresh] Token for ${shop.myshopifyDomain} expires in ${hoursUntilExpiry.toFixed(1)}h — refreshing`);
         const resp = await fetch(`https://${shop.myshopifyDomain}/admin/oauth/access_token`, {
@@ -132,7 +133,10 @@ async function start() {
     } catch (e) {
       console.error('[refresh] Cron error:', e);
     }
-  }, 6 * 60 * 60 * 1000); // every 6 hours
+  };
+
+  refreshExpiringTokens();                                  // once on boot
+  setInterval(refreshExpiringTokens, 30 * 60 * 1000);       // every 30 minutes
 }
 
 process.on('SIGINT', async () => {
